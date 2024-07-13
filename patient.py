@@ -1,58 +1,79 @@
-from getpass import getpass
+import curses
+from utils import menu_loop, get_string_input
 
 
 def login(cursor, username, password):
-    cursor.execute("SELECT id FROM patients WHERE username=%s AND password=%s", (username, password))
+    cursor.execute("SELECT id FROM patients WHERE username = %s AND password = %s", (username, password))
     result = cursor.fetchone()
-    if result:
-        print("Login successful!")
-        return result[0]
-    else:
-        print("Invalid username or password.")
-        return None
+    return result[0] if result else None
 
 
-def patient_menu(db, cursor, patient_id):
+def register(stdscr, db, cursor):
     while True:
-        print("\nPatient Menu")
-        print("1. Add prescription")
-        print("2. View confirmed prescriptions")
-        print("3. Edit prescription")
-        print("4. Delete prescription")
-        print("5. Logout")
-        choice = input("Enter your choice: ")
+        username = get_string_input(stdscr, "Enter desired username: ")
+        password = get_string_input(stdscr, "Enter password: ")
+        confirm_password = get_string_input(stdscr, "Confirm password: ")
 
-        if choice == "1":
-            add_prescription(db, cursor, patient_id)
-        elif choice == "2":
-            view_confirmed_prescriptions(cursor, patient_id)
-        elif choice == "3":
-            edit_prescription(db, cursor, patient_id)
-        elif choice == "4":
-            delete_prescription(db, cursor, patient_id)
-        elif choice == "5":
-            print("Logging out...")
+        if password != confirm_password:
+            stdscr.addstr("Passwords do not match. Try again.")
+            stdscr.getch()
+            continue
+
+        cursor.execute("SELECT id FROM patients WHERE username = %s", (username,))
+        if cursor.fetchone():
+            stdscr.addstr("Username already exists. Please choose another.")
+            stdscr.getch()
+            continue
+
+        cursor.execute("INSERT INTO patients (username, password) VALUES (%s, %s)", (username, password))
+        db.commit()
+        stdscr.addstr("Registration successful! You can now log in.")
+        stdscr.getch()
+        break
+
+
+def patient_menu(stdscr, db, cursor, patient_id):
+    while True:
+        choice = menu_loop(stdscr, "Patient Menu", [
+            "Add prescription",
+            "View confirmed prescriptions",
+            "Edit prescription",
+            "Delete prescription",
+            "View pending prescriptions",
+            "Logout"
+        ])
+
+        if choice == 0:
+            add_prescription(stdscr, db, cursor, patient_id)
+        elif choice == 1:
+            view_confirmed_prescriptions(stdscr, cursor, patient_id)
+        elif choice == 2:
+            edit_prescription(stdscr, db, cursor, patient_id)
+        elif choice == 3:
+            delete_prescription(stdscr, db, cursor, patient_id)
+        elif choice == 4:
+            view_pending_prescriptions(stdscr, cursor, patient_id)
+        elif choice == 5:
             break
-        else:
-            print("Invalid choice. Please try again.")
 
 
-def add_prescription(db, cursor, patient_id):
+def add_prescription(stdscr, db, cursor, patient_id):
     cursor.execute("INSERT INTO prescriptions (patient_id) VALUES (%s)", (patient_id,))
     prescription_id = cursor.lastrowid
 
     for i in range(10):
-        item_name = input(f"Enter item {i + 1} name (or press Enter to finish): ")
+        item_name = get_string_input(stdscr, f"Enter item {i + 1} name (or press Enter to finish): ")
         if not item_name:
             break
         cursor.execute("INSERT INTO prescription_items (prescription_id, item_name) VALUES (%s, %s)",
                        (prescription_id, item_name))
 
     db.commit()
-    print("Prescription added successfully!")
+    stdscr.addstr("Prescription added successfully!")
+    stdscr.getch()
 
 
-def view_confirmed_prescriptions(cursor, patient_id):
+def view_confirmed_prescriptions(stdscr, cursor, patient_id):
     cursor.execute("""
         SELECT p.id, pi.item_name, pi.price
         FROM prescriptions p
@@ -62,66 +83,126 @@ def view_confirmed_prescriptions(cursor, patient_id):
     prescriptions = cursor.fetchall()
 
     if not prescriptions:
-        print("No confirmed prescriptions found.")
+        stdscr.addstr("No confirmed prescriptions found.")
+        stdscr.getch()
         return
 
+    stdscr.clear()
     current_prescription_id = None
     total_price = 0
+    row = 0
 
     for prescription in prescriptions:
         if prescription[0] != current_prescription_id:
             if current_prescription_id is not None:
-                print(f"Total price: ${total_price:.2f}\n")
+                stdscr.addstr(row, 0, f"Total price: ${total_price:.2f}")
+                row += 2
             current_prescription_id = prescription[0]
-            print(f"Prescription ID: {current_prescription_id}")
+            stdscr.addstr(row, 0, f"Prescription ID: {current_prescription_id}")
+            row += 1
             total_price = 0
 
-        print(f"Item: {prescription[1]}, Price: ${prescription[2]:.2f}")
+        stdscr.addstr(row, 0, f"Item: {prescription[1]}, Price: ${prescription[2]:.2f}")
+        row += 1
         total_price += prescription[2]
 
-    print(f"Total price: ${total_price:.2f}")
+    stdscr.addstr(row, 0, f"Total price: ${total_price:.2f}")
+    stdscr.getch()
 
 
-def edit_prescription(db, cursor, patient_id):
-    prescription_id = int(input("Enter prescription ID to edit: "))
+def view_pending_prescriptions(stdscr, cursor, patient_id):
+    cursor.execute("""
+        SELECT p.id, pi.item_name
+        FROM prescriptions p
+        JOIN prescription_items pi ON p.id = pi.prescription_id
+        WHERE p.patient_id = %s AND p.status = 'pending'
+    """, (patient_id,))
+    prescriptions = cursor.fetchall()
+
+    if not prescriptions:
+        stdscr.addstr("No pending prescriptions found.")
+        stdscr.getch()
+        return
+
+    stdscr.clear()
+    current_prescription_id = None
+    row = 0
+
+    for prescription in prescriptions:
+        if prescription[0] != current_prescription_id:
+            if current_prescription_id is not None:
+                row += 1
+            current_prescription_id = prescription[0]
+            stdscr.addstr(row, 0, f"Prescription ID: {current_prescription_id}")
+            row += 1
+
+        stdscr.addstr(row, 0, f"Item: {prescription[1]}")
+        row += 1
+
+    stdscr.getch()
+
+
+def edit_prescription(stdscr, db, cursor, patient_id):
+    view_pending_prescriptions(stdscr, cursor, patient_id)
+    prescription_id = int(get_string_input(stdscr, "Enter prescription ID to edit: "))
+
     cursor.execute("SELECT id FROM prescriptions WHERE id = %s AND patient_id = %s AND status = 'pending'",
                    (prescription_id, patient_id))
     if not cursor.fetchone():
-        print("Prescription not found or cannot be edited.")
+        stdscr.addstr("Prescription not found or cannot be edited.")
+        stdscr.getch()
         return
 
     while True:
-        print("\n1. Add item")
-        print("2. Remove item")
-        print("3. Finish editing")
-        choice = input("Enter your choice: ")
+        choice = menu_loop(stdscr, f"Editing Prescription {prescription_id}", [
+            "Add item",
+            "Remove item",
+            "Finish editing"
+        ])
 
-        if choice == '1':
-            item_name = input("Enter new item name: ")
+        if choice == 0:
+            item_name = get_string_input(stdscr, "Enter new item name: ")
             cursor.execute("INSERT INTO prescription_items (prescription_id, item_name) VALUES (%s, %s)",
                            (prescription_id, item_name))
-        elif choice == '2':
-            item_name = input("Enter item name to remove: ")
-            cursor.execute("DELETE FROM prescription_items WHERE prescription_id = %s AND item_name = %s",
-                           (prescription_id, item_name))
-        elif choice == '3':
+        elif choice == 1:
+            cursor.execute("SELECT id, item_name FROM prescription_items WHERE prescription_id = %s",
+                           (prescription_id,))
+            items = cursor.fetchall()
+            if not items:
+                stdscr.addstr("No items in this prescription.")
+                stdscr.getch()
+                continue
+
+            item_choices = [f"{item[1]}" for item in items] + ["Cancel"]
+            item_choice = menu_loop(stdscr, "Select item to remove", item_choices)
+
+            if item_choice < len(items):
+                cursor.execute("DELETE FROM prescription_items WHERE id = %s", (items[item_choice][0],))
+        elif choice == 2:
             break
-        else:
-            print("Invalid choice. Please try again.")
 
     db.commit()
-    print("Prescription updated successfully!")
+    stdscr.addstr("Prescription updated successfully!")
+    stdscr.getch()
 
 
-def delete_prescription(db, cursor, patient_id):
-    prescription_id = int(input("Enter prescription ID to delete: "))
+def delete_prescription(stdscr, db, cursor, patient_id):
+    view_pending_prescriptions(stdscr, cursor, patient_id)
+    prescription_id = int(get_string_input(stdscr, "Enter prescription ID to delete: "))
+
     cursor.execute("SELECT id FROM prescriptions WHERE id = %s AND patient_id = %s AND status = 'pending'",
                    (prescription_id, patient_id))
     if not cursor.fetchone():
-        print("Prescription not found or cannot be deleted.")
+        stdscr.addstr("Prescription not found or cannot be deleted.")
+        stdscr.getch()
         return
 
-    cursor.execute("DELETE FROM prescription_items WHERE prescription_id = %s", (prescription_id,))
-    cursor.execute("DELETE FROM prescriptions WHERE id = %s", (prescription_id,))
-    db.commit()
-    print("Prescription deleted successfully!")
+    confirm = get_string_input(stdscr, "Are you sure you want to delete this prescription? (y/n): ").lower()
+    if confirm == 'y':
+        cursor.execute("DELETE FROM prescription_items WHERE prescription_id = %s", (prescription_id,))
+        cursor.execute("DELETE FROM prescriptions WHERE id = %s", (prescription_id,))
+        db.commit()
+        stdscr.addstr("Prescription deleted successfully!")
+    else:
+        stdscr.addstr("Deletion cancelled.")
+    stdscr.getch()

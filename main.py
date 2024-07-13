@@ -1,8 +1,10 @@
+# main.py
+import curses
 import mysql.connector
-from getpass import getpass
 import patient
 import admin
 import sys
+from utils import menu_loop, get_string_input
 
 
 def connect_to_database():
@@ -13,55 +15,42 @@ def connect_to_database():
             password="toor",
             database="pharmacy_management"
         )
-    except mysql.connector.Error as error:
-        print("Error connecting to MySQL database:", error)
+    except mysql.connector.Error as err:
+        print(f"Error connecting to the database: {err}")
         sys.exit(1)
 
 
-def get_valid_choice(min_value, max_value):
-    while True:
-        try:
-            choice = int(input("Enter your choice: "))
-            if min_value <= choice <= max_value:
-                return choice
-            else:
-                print(f"Please enter a number between {min_value} and {max_value}.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
-
-
-def main():
+def main(stdscr):
     db = connect_to_database()
     cursor = db.cursor()
 
     while True:
-        print("\nPharmacy Management System")
-        print("1. Login as Patient")
-        print("2. Login as Admin")
-        print("3. Register as Patient")
-        print("4. Exit")
-        choice = get_valid_choice(1, 4)
+        choice = menu_loop(stdscr, "Pharmacy Management System", [
+            "Login as Patient",
+            "Login as Admin",
+            "Register as Patient",
+            "Exit"
+        ])
 
-        if choice == 1:
-            username = input("Enter username: ")
-            password = getpass("Enter password: ")
+        if choice == 0:  # Login as Patient
+            username = get_string_input(stdscr, "Enter username: ")
+            password = get_string_input(stdscr, "Enter password: ")
             patient_id = patient.login(cursor, username, password)
             if patient_id:
-                patient.patient_menu(db, cursor, patient_id)
-        elif choice == 2:
-            username = input("Enter username: ")
-            password = getpass("Enter password: ")
+                patient.patient_menu(stdscr, db, cursor, patient_id)
+        elif choice == 1:  # Login as Admin
+            username = get_string_input(stdscr, "Enter username: ")
+            password = get_string_input(stdscr, "Enter password: ")
             admin_id = admin.login(cursor, username, password)
             if admin_id:
-                admin.admin_menu(db, cursor)
-        elif choice == 3:
-            patient.register(db, cursor)
-        elif choice == 4:
-            print("Thank you for using the Pharmacy Management System.")
+                admin.admin_menu(stdscr, db, cursor)
+        elif choice == 2:  # Register as Patient
+            patient.register(stdscr, db, cursor)
+        elif choice == 3:  # Exit
             break
 
     db.close()
 
 
 if __name__ == "__main__":
-    main()
+    curses.wrapper(main)
