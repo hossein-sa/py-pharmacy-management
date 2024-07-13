@@ -1,5 +1,5 @@
 import curses
-from utils import menu_loop, get_string_input
+from utils import menu_loop, get_string_input, show_message
 
 
 def login(cursor, username, password):
@@ -40,8 +40,7 @@ def view_all_prescriptions(stdscr, cursor):
     prescriptions = cursor.fetchall()
 
     if not prescriptions:
-        stdscr.addstr("No prescriptions found.")
-        stdscr.getch()
+        show_message(stdscr, "No prescriptions found.")
         return
 
     stdscr.clear()
@@ -70,8 +69,7 @@ def confirm_prescription(stdscr, db, cursor):
     prescription_id = int(get_string_input(stdscr, "Enter prescription ID to confirm: "))
     cursor.execute("SELECT id FROM prescriptions WHERE id = %s AND status = 'pending'", (prescription_id,))
     if not cursor.fetchone():
-        stdscr.addstr("Prescription not found or already confirmed.")
-        stdscr.getch()
+        show_message(stdscr, "Prescription not found or already confirmed.")
         return
 
     cursor.execute("SELECT id, item_name FROM prescription_items WHERE prescription_id = %s", (prescription_id,))
@@ -88,8 +86,7 @@ def confirm_prescription(stdscr, db, cursor):
 
     cursor.execute("UPDATE prescriptions SET status = 'confirmed' WHERE id = %s", (prescription_id,))
     db.commit()
-    stdscr.addstr("Prescription confirmed successfully!")
-    stdscr.getch()
+    show_message(stdscr, "Prescription confirmed successfully!")
 
 
 def view_prescription_statistics(stdscr, cursor):
@@ -119,6 +116,7 @@ def advanced_analytics(stdscr, cursor):
             "Monthly prescription trends",
             "Patient prescription frequency",
             "Average processing time",
+            "Prescription value distribution",
             "Back to Admin Menu"
         ])
 
@@ -131,6 +129,8 @@ def advanced_analytics(stdscr, cursor):
         elif choice == 3:
             average_processing_time(stdscr, cursor)
         elif choice == 4:
+            prescription_value_distribution(stdscr, cursor)
+        elif choice == 5:
             break
 
 
@@ -161,11 +161,7 @@ def monthly_prescription_trends(stdscr, cursor):
     """)
     trends = cursor.fetchall()
 
-    stdscr.clear()
-    stdscr.addstr(0, 0, "Monthly Prescription Trends:")
-    for i, (month, count) in enumerate(trends):
-        stdscr.addstr(i + 1, 0, f"{month}: {count}")
-    stdscr.getch()
+    draw_bar_chart(stdscr, trends, "Monthly Prescription Trends")
 
 
 def patient_prescription_frequency(stdscr, cursor):

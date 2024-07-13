@@ -1,4 +1,3 @@
-# utils.py
 import curses
 
 
@@ -44,8 +43,18 @@ def draw_menu(stdscr, selected_row_idx, menu_title, menu_items):
 
 def get_string_input(stdscr, prompt):
     curses.echo()
-    stdscr.addstr(prompt)
+    stdscr.clear()
+    h, w = stdscr.getmaxyx()
+    stdscr.addstr(h // 2, 0, prompt)
     stdscr.refresh()
-    input_str = stdscr.getstr().decode('utf-8')
+    input_str = stdscr.getstr(h // 2, len(prompt)).decode('utf-8')
     curses.noecho()
     return input_str
+
+
+def show_message(stdscr, message):
+    stdscr.clear()
+    h, w = stdscr.getmaxyx()
+    stdscr.addstr(h // 2, w // 2 - len(message) // 2, message)
+    stdscr.refresh()
+    stdscr.getch()

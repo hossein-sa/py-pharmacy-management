@@ -1,10 +1,9 @@
-# main.py
 import curses
 import mysql.connector
 import patient
 import admin
 import sys
-from utils import menu_loop, get_string_input
+from utils import menu_loop, get_string_input, show_message
 
 
 def connect_to_database():
