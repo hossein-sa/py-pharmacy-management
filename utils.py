@@ -2,7 +2,9 @@ import curses
 
 
 def menu_loop(stdscr, menu_title, menu_items):
+    # Set cursor visibility to 0 (invisible)
     curses.curs_set(0)
+    # Initialize color pair
     curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
     current_row = 0
@@ -41,15 +43,27 @@ def draw_menu(stdscr, selected_row_idx, menu_title, menu_items):
     stdscr.refresh()
 
 
-def get_string_input(stdscr, prompt):
+def get_string_input(stdscr, prompt, allow_empty=False):
     curses.echo()
     stdscr.clear()
     h, w = stdscr.getmaxyx()
     stdscr.addstr(h // 2, 0, prompt)
     stdscr.refresh()
-    input_str = stdscr.getstr(h // 2, len(prompt)).decode('utf-8')
+    input_str = stdscr.getstr(h // 2, len(prompt)).decode('utf-8').strip()
     curses.noecho()
+    if not allow_empty and not input_str:
+        show_message(stdscr, "Input cannot be empty. Please try again.")
+        return get_string_input(stdscr, prompt, allow_empty)
     return input_str
+
+
+def get_int_input(stdscr, prompt):
+    while True:
+        input_str = get_string_input(stdscr, prompt)
+        try:
+            return int(input_str)
+        except ValueError:
+            show_message(stdscr, "Invalid input. Please enter a valid number.")
 
 
 def show_message(stdscr, message):

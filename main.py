@@ -19,9 +19,22 @@ def connect_to_database():
         sys.exit(1)
 
 
+def check_and_add_admin(cursor, db):
+    cursor.execute("SELECT COUNT(*) FROM admins")
+    admin_count = cursor.fetchone()[0]
+
+    if admin_count == 0:
+        cursor.execute("INSERT INTO admins (username, password) VALUES (%s, %s)", ("admin", "admin"))
+        db.commit()
+        print("Default admin account created: username 'admin', password 'admin'")
+
+
 def main(stdscr):
     db = connect_to_database()
     cursor = db.cursor()
+
+    # Check and add admin if not exists
+    check_and_add_admin(cursor, db)
 
     while True:
         choice = menu_loop(stdscr, "Pharmacy Management System", [
